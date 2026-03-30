@@ -1,4 +1,4 @@
-from scapy.all import sniff, IP, TCP, UDP
+from scapy.all import sniff, IP, TCP, UDP, Ether
 from datetime import datetime
 from core.event_bus import event_bus
 from database.buffer import add_packet
@@ -6,7 +6,6 @@ from database.buffer import add_packet
 
 def process_packet(packet):
 
-    # ignore packets without IP layer
     if not packet.haslayer(IP):
         return
 
@@ -23,20 +22,27 @@ def process_packet(packet):
             src_port = packet[UDP].sport
             dst_port = packet[UDP].dport
 
+        src_mac = None
+        dst_mac = None
+
+        if packet.haslayer(Ether):
+            src_mac = packet[Ether].src
+            dst_mac = packet[Ether].dst
+
         packet_data = {
             "timestamp": str(datetime.utcnow()),
             "src_ip": packet[IP].src,
             "dst_ip": packet[IP].dst,
+            "src_mac": src_mac,
+            "dst_mac": dst_mac,
             "protocol": packet[IP].proto,
             "src_port": src_port,
             "dst_port": dst_port,
             "length": len(packet)
         }
 
-        # store packet (buffered)
         add_packet(packet_data)
 
-        # publish event
         event_bus.publish("packet", packet_data)
 
     except Exception as e:

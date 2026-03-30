@@ -1,32 +1,32 @@
-import os
 import joblib
+import os
 import pandas as pd
 
-MODEL_PATH = "../models/isolation_forest.pkl"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "../../models/isolation_forest.pkl")
 
 model = None
 
-# load model safely
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
     print("Isolation Forest model loaded")
 else:
-    print("⚠ ML model not found. Run training script.")
+    print("Warning: Isolation Forest model not found")
 
 
 def predict(features):
 
-    global model
-
-    # if model not loaded, skip ML detection
     if model is None:
-        return 1
+        return 1, 0
 
-    df = pd.DataFrame([{
-        "packet_length": features["packet_length"],
-        "protocol": features["protocol"],
-        "connection_rate": features["connection_rate"],
-        "unique_ports": features["unique_ports"]
+    input_data = pd.DataFrame([{
+        "Destination Port": features.get("dst_port", 0) or 0,
+        "Packet Length Mean": features.get("packet_length", 0),
+        "Flow Packets/s": features.get("connection_rate", 0),
+        "Total Fwd Packets": features.get("connection_rate", 0),
+        "Total Backward Packets": 0
     }])
 
-    return model.predict(df)[0]
+    prediction = model.predict(input_data)[0]
+    score = model.decision_function(input_data)[0]
+
+    return prediction, score

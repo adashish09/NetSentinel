@@ -1,6 +1,7 @@
 from fastapi import APIRouter, WebSocket
 from api.ws_manager import manager
 from database.mongodb import alerts_collection
+from database.mongodb import features_collection
 
 router = APIRouter()
 
@@ -42,3 +43,35 @@ async def packet_stream(websocket: WebSocket):
             await websocket.receive_text()
     except:
         manager.disconnect(websocket)
+
+
+# -------- TOP ATTACKERS --------
+@router.get("/top-attackers")
+def top_attackers():
+
+    pipeline = [
+        {
+            "$group": {
+                "_id": "$src_ip",
+                "count": {"$sum": 1}
+            }
+        },
+        {
+            "$sort": {"count": -1}
+        },
+        {
+            "$limit": 5
+        }
+    ]
+
+    results = list(features_collection.aggregate(pipeline))
+
+    attackers = []
+
+    for r in results:
+        attackers.append({
+            "ip": r["_id"],
+            "count": r["count"]
+        })
+
+    return attackers

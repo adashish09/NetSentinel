@@ -3,26 +3,59 @@ from sklearn.ensemble import IsolationForest
 import joblib
 import os
 
-# fake training data for now
-data = {
-    "packet_length": [60, 70, 80, 90, 100, 110],
-    "protocol": [6, 6, 17, 6, 17, 6],
-    "connection_rate": [2, 3, 1, 4, 2, 3],
-    "unique_ports": [1, 1, 2, 1, 2, 1]
-}
+# ----------------------------
+# Load dataset
+# ----------------------------
+DATA_PATH = "../datasets/Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv"
+MODEL_PATH = "../models/isolation_forest.pkl"
 
-df = pd.DataFrame(data)
+print("Loading dataset...")
+df = pd.read_csv(DATA_PATH)
+
+# ----------------------------
+# Clean column names
+# ----------------------------
+df.columns = df.columns.str.strip()
+
+print("Available columns:")
+print(df.columns.tolist())
+
+# ----------------------------
+# Select features matching live NetSentinel traffic
+# ----------------------------
+selected_columns = [
+    "Destination Port",
+    "Packet Length Mean",
+    "Flow Packets/s",
+    "Total Fwd Packets",
+    "Total Backward Packets"
+]
+
+df = df[selected_columns].copy()
+
+# ----------------------------
+# Clean invalid values
+# ----------------------------
+df.replace([float("inf"), float("-inf")], pd.NA, inplace=True)
+df.dropna(inplace=True)
+
+# ----------------------------
+# Train Isolation Forest
+# ----------------------------
+print("Training Isolation Forest model...")
 
 model = IsolationForest(
     n_estimators=100,
-    contamination=0.1,
+    contamination=0.05,
     random_state=42
 )
 
 model.fit(df)
 
+# ----------------------------
+# Save model
+# ----------------------------
 os.makedirs("../models", exist_ok=True)
+joblib.dump(model, MODEL_PATH)
 
-joblib.dump(model, "../models/isolation_forest.pkl")
-
-print("Model trained and saved")
+print(f"Model trained and saved at {MODEL_PATH}")

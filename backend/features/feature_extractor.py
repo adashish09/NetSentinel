@@ -2,8 +2,6 @@ from core.event_bus import event_bus
 from collections import defaultdict
 import time
 from database.mongodb import features_collection
-from api.ws_manager import manager
-import asyncio
 
 # track ports accessed by source IP
 port_tracker = defaultdict(set)
@@ -13,8 +11,14 @@ connection_times = defaultdict(list)
 
 WINDOW = 2
 
+# real packet counter
+packet_counter = 0
+
 
 def extract_features(packet):
+
+    global packet_counter
+    packet_counter += 1
 
     src_ip = packet["src_ip"]
     dst_port = packet["dst_port"]
@@ -32,11 +36,22 @@ def extract_features(packet):
     if dst_port:
         port_tracker[src_ip].add(dst_port)
 
+    protocol_map = {
+        1: "ICMP",
+        6: "TCP",
+        17: "UDP"
+    }
+
+    protocol_name = protocol_map.get(packet["protocol"], str(packet["protocol"]))
+
     features = {
+        "packet_id": packet_counter,
         "timestamp": packet["timestamp"],
         "src_ip": src_ip,
         "dst_ip": packet["dst_ip"],
-        "protocol": packet["protocol"],
+        "src_mac": packet["src_mac"],
+        "dst_mac": packet["dst_mac"],
+        "protocol": protocol_name,
         "packet_length": packet["length"],
         "dst_port": dst_port,
         "connection_rate": len(connection_times[src_ip]),
@@ -44,29 +59,13 @@ def extract_features(packet):
     }
 
     # store features in MongoDB
-    features_collection.insert_one(features)
+    result = features_collection.insert_one(features)
+    features["_id"] = str(result.inserted_id)
+
+    print("FEATURE EVENT:", features)
 
     # publish to detection engine
     event_bus.publish("features", features)
-
-
-    print("Broadcasting packet:", features)
-    print("Connected dashboards:", len(manager.active_connections))
-
-    # broadcast packet to dashboard
-    # remove mongodb object id before sending to websocket
-    if "_id" in features:
-        features["_id"] = str(features["_id"])
-
-    print("Broadcasting packet:", features)
-    print("Connected dashboards:", len(manager.active_connections))
-
-    if manager.loop and manager.active_connections:
-        asyncio.run_coroutine_threadsafe(
-            manager.broadcast(features),
-            manager.loop
-        )
-
 
 
 event_bus.subscribe("packet", extract_features)
