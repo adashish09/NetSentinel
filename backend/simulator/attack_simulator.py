@@ -1,135 +1,242 @@
-import socket
-import time
+import requests
 import random
-import threading
+import time
 
-TARGET_IP = "192.168.0.118"   # CHANGE THIS to your machine IP
-WEB_PORTS = [80, 443, 8080]
-COMMON_PORTS = [22, 53, 80, 443, 8080, 3306, 27017]
+API_URL = "http://127.0.0.1:8000/simulate/packet"
 
 
-# =========================
-# Helper: create TCP connection
-# =========================
-def send_tcp(port, timeout=0.5):
+def send_packet(src_ip, dst_ip, port, protocol=6, length=100):
+    packet = {
+        "src_ip": src_ip,
+        "dst_ip": dst_ip,
+        "src_mac": "AA:BB:CC:DD:EE:FF",
+        "dst_mac": "FF:EE:DD:CC:BB:AA",
+        "protocol": protocol,
+        "src_port": random.randint(1000, 65000),
+        "dst_port": port,
+        "length": length
+    }
+
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        s.connect((TARGET_IP, port))
-        s.close()
-    except:
-        pass
+        requests.post(API_URL, json=packet, timeout=5)
+    except Exception as e:
+        print("Failed to send simulated packet:", e)
 
 
 # =========================
-# NORMAL TRAFFIC
+# BACKGROUND NORMAL TRAFFIC
 # =========================
-def normal_traffic(duration=10):
-    print("[SIM] Starting NORMAL traffic...")
-    end_time = time.time() + duration
+def background_normal(duration=60):
+    print(f"🟢 Background normal traffic for {duration}s...")
+    start = time.time()
 
-    while time.time() < end_time:
-        send_tcp(random.choice(WEB_PORTS), timeout=1)
-        time.sleep(random.uniform(0.8, 1.5))
+    while time.time() - start < duration:
+        port = random.choice([80, 443, 53, 22])
+        protocol = random.choice([6, 17])  # TCP / UDP
 
-    print("[SIM] NORMAL traffic completed.")
+        send_packet(
+            src_ip=random.choice(["10.0.0.10", "10.0.0.11", "10.0.0.12"]),
+            dst_ip="192.168.0.1",
+            port=port,
+            protocol=protocol,
+            length=random.randint(60, 300)
+        )
 
-
-# =========================
-# LOW SEVERITY ATTACK
-# Repeated mild suspicious traffic
-# =========================
-def low_attack(duration=10):
-    print("[SIM] Starting LOW severity suspicious traffic...")
-    end_time = time.time() + duration
-
-    while time.time() < end_time:
-        send_tcp(random.choice(COMMON_PORTS), timeout=0.5)
-        time.sleep(0.25)
-
-    print("[SIM] LOW attack completed.")
+        time.sleep(random.uniform(0.2, 0.8))
 
 
 # =========================
-# MEDIUM SEVERITY ATTACK
-# Burst traffic
+# LOW ATTACK
 # =========================
-def medium_attack(duration=10):
-    print("[SIM] Starting MEDIUM severity burst traffic...")
-    end_time = time.time() + duration
+def low_attack(duration=90):
+    print(f"🟡 Low suspicious traffic for {duration}s...")
+    start = time.time()
 
-    while time.time() < end_time:
-        for _ in range(8):
-            send_tcp(random.choice(COMMON_PORTS), timeout=0.2)
-        time.sleep(0.15)
+    while time.time() - start < duration:
+        # mix normal traffic
+        if random.random() < 0.6:
+            send_packet(
+                src_ip=random.choice(["10.0.0.10", "10.0.0.11"]),
+                dst_ip="192.168.0.1",
+                port=random.choice([80, 443]),
+                protocol=6,
+                length=random.randint(60, 250)
+            )
 
-    print("[SIM] MEDIUM attack completed.")
+        # slightly suspicious source
+        send_packet(
+            src_ip="10.0.0.20",
+            dst_ip="192.168.0.1",
+            port=80,
+            protocol=6,
+            length=random.randint(120, 350)
+        )
 
-
-# =========================
-# HIGH SEVERITY ATTACK
-# Port scan
-# =========================
-def high_attack(duration=10):
-    print("[SIM] Starting HIGH severity port scan...")
-    end_time = time.time() + duration
-
-    while time.time() < end_time:
-        for port in range(20, 120):
-            send_tcp(port, timeout=0.08)
-        time.sleep(0.3)
-
-    print("[SIM] HIGH attack completed.")
+        time.sleep(0.08)
 
 
 # =========================
-# CRITICAL SEVERITY ATTACK
-# Heavy burst flood
+# MEDIUM ATTACK
 # =========================
-def critical_attack(duration=10):
-    print("[SIM] Starting CRITICAL flood attack...")
-    end_time = time.time() + duration
+def medium_attack(duration=90):
+    print(f"🟠 Medium suspicious traffic for {duration}s...")
+    start = time.time()
 
-    while time.time() < end_time:
-        threads = []
+    while time.time() - start < duration:
+        if random.random() < 0.4:
+            send_packet(
+                src_ip=random.choice(["10.0.0.10", "10.0.0.11"]),
+                dst_ip="192.168.0.1",
+                port=random.choice([80, 443]),
+                protocol=6,
+                length=random.randint(60, 250)
+            )
 
-        for _ in range(50):
-            port = random.randint(1, 1000)
-
-            t = threading.Thread(target=send_tcp, args=(port, 0.03))
-            t.start()
-            threads.append(t)
-
-        for t in threads:
-            t.join()
+        send_packet(
+            src_ip="10.0.0.21",
+            dst_ip="192.168.0.1",
+            port=80,
+            protocol=6,
+            length=random.randint(150, 500)
+        )
 
         time.sleep(0.05)
 
-    print("[SIM] CRITICAL attack completed.")
+
+# =========================
+# HIGH ATTACK
+# =========================
+def high_attack(duration=90):
+    print(f"🔴 Port scan in progress for {duration}s...")
+    start = time.time()
+    port = 20
+
+    while time.time() - start < duration:
+        if random.random() < 0.3:
+            send_packet(
+                src_ip=random.choice(["10.0.0.10", "10.0.0.11"]),
+                dst_ip="192.168.0.1",
+                port=random.choice([80, 443]),
+                protocol=6,
+                length=random.randint(60, 200)
+            )
+
+        send_packet(
+            src_ip="10.0.0.30",
+            dst_ip="192.168.0.1",
+            port=port,
+            protocol=6,
+            length=random.randint(60, 150)
+        )
+
+        port += 1
+        if port > 120:
+            port = 20
+
+        time.sleep(0.03)
 
 
 # =========================
-# MAIN MENU
+# CRITICAL ATTACK
+# =========================
+def critical_attack(duration=90):
+    print(f"🚨 Critical flood attack for {duration}s...")
+    start = time.time()
+
+    while time.time() - start < duration:
+        if random.random() < 0.2:
+            send_packet(
+                src_ip=random.choice(["10.0.0.10", "10.0.0.11"]),
+                dst_ip="192.168.0.1",
+                port=random.choice([80, 443, 53]),
+                protocol=random.choice([6, 17]),
+                length=random.randint(60, 250)
+            )
+
+        send_packet(
+            src_ip="10.0.0.99",
+            dst_ip="192.168.0.1",
+            port=random.randint(1, 200),
+            protocol=6,
+            length=random.randint(200, 1400)
+        )
+
+        time.sleep(0.005)
+
+
+# =========================
+# FULL DEMO SCENARIOS
+# =========================
+def run_low_demo():
+    print("\n=== LOW DEMO (~3 min) ===")
+    background_normal(45)
+    low_attack(90)
+    background_normal(45)
+    print("✅ Low demo completed")
+
+
+def run_medium_demo():
+    print("\n=== MEDIUM DEMO (~3 min) ===")
+    background_normal(45)
+    medium_attack(90)
+    background_normal(45)
+    print("✅ Medium demo completed")
+
+
+def run_high_demo():
+    print("\n=== HIGH DEMO (~3 min) ===")
+    background_normal(45)
+    high_attack(90)
+    background_normal(45)
+    print("✅ High demo completed")
+
+
+def run_critical_demo():
+    print("\n=== CRITICAL DEMO (~4 min) ===")
+    background_normal(30)
+    medium_attack(45)
+    high_attack(45)
+    critical_attack(90)
+    background_normal(30)
+    print("✅ Critical demo completed")
+
+
+def run_mixed_demo():
+    print("\n=== FULL MIXED ATTACK DEMO (~5 min) ===")
+    background_normal(45)
+    low_attack(45)
+    background_normal(20)
+    medium_attack(45)
+    background_normal(20)
+    high_attack(45)
+    background_normal(20)
+    critical_attack(60)
+    background_normal(20)
+    print("✅ Mixed demo completed")
+
+
+# =========================
+# MENU
 # =========================
 if __name__ == "__main__":
     print("\n=== NetSentinel Attack Simulator ===")
-    print("1. Normal Traffic")
-    print("2. Low Severity Attack")
-    print("3. Medium Severity Attack")
-    print("4. High Severity Attack")
-    print("5. Critical Severity Attack")
+    print("1. Low Demo (~3 min)")
+    print("2. Medium Demo (~3 min)")
+    print("3. High Demo (~3 min)")
+    print("4. Critical Demo (~4 min)")
+    print("5. Full Mixed Demo (~5 min)")
 
-    choice = input("Select simulation type (1-5): ")
+    choice = input("Select simulation type (1-5): ").strip()
 
     if choice == "1":
-        normal_traffic()
+        run_low_demo()
     elif choice == "2":
-        low_attack()
+        run_medium_demo()
     elif choice == "3":
-        medium_attack()
+        run_high_demo()
     elif choice == "4":
-        high_attack()
+        run_critical_demo()
     elif choice == "5":
-        critical_attack()
+        run_mixed_demo()
     else:
-        print("Invalid choice.")
+        print("❌ Invalid choice")

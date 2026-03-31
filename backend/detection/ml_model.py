@@ -1,32 +1,28 @@
-import joblib
 import os
-import pandas as pd
+import joblib
+import numpy as np
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "../../models/isolation_forest.pkl")
+# =========================
+# SAFE PATHS
+# =========================
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+MODEL_PATH = os.path.join(BASE_DIR, "models", "isolation_forest.pkl")
+SCALER_PATH = os.path.join(BASE_DIR, "models", "scaler.pkl")
 
-model = None
+print("Loading model from:", MODEL_PATH)
 
-if os.path.exists(MODEL_PATH):
-    model = joblib.load(MODEL_PATH)
-    print("Isolation Forest model loaded")
-else:
-    print("Warning: Isolation Forest model not found")
-
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
 
 def predict(features):
+    data = np.array([[
+        features["connection_rate"],
+        features["dst_port"] or 0,
+        features["packet_length"]
+    ]])
 
-    if model is None:
-        return 1, 0
+    data_scaled = scaler.transform(data)
+    prediction = model.predict(data_scaled)[0]
+    score = model.decision_function(data_scaled)[0]
 
-    input_data = pd.DataFrame([{
-        "Destination Port": features.get("dst_port", 0) or 0,
-        "Packet Length Mean": features.get("packet_length", 0),
-        "Flow Packets/s": features.get("connection_rate", 0),
-        "Total Fwd Packets": features.get("connection_rate", 0),
-        "Total Backward Packets": 0
-    }])
-
-    prediction = model.predict(input_data)[0]
-    score = model.decision_function(input_data)[0]
-
-    return prediction, score
+    return prediction, float(score)

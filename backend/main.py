@@ -11,6 +11,7 @@ import alerts.alert_manager
 import detection.detector
 import detection.post_detection
 import utils.helpers
+import alerts.packet_broadcaster
 
 from database.buffer import start_buffer
 from api.ws_manager import manager

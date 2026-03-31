@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from "react"
+import React, { useEffect, useState } from "react"
+import API from "../services/api"
 
 function getThreatLevel(score) {
   if (score >= 80) return { label: "Critical", color: "#ef4444" }
@@ -12,81 +13,94 @@ function ThreatScoreCard() {
   const [score, setScore] = useState(0)
   const [lastAlert, setLastAlert] = useState("No recent threats")
 
-  const recentPackets = useRef([])
-
   useEffect(() => {
-    const ws = new WebSocket("ws://127.0.0.1:8000/ws/packets")
+    let interval
 
-    ws.onmessage = (event) => {
-      const packet = JSON.parse(event.data)
-      const now = Date.now()
+    async function loadThreatScore() {
+      try {
+        const threatRes = await API.get("/threat-score")
+        setScore(threatRes.data.score || 0)
 
-      recentPackets.current.push({
-        time: now,
-        anomaly: packet.anomaly,
-        severity: packet.severity
-      })
-
-      if (packet.anomaly) {
-        setLastAlert(`${packet.src_ip} • ${packet.severity || "Anomaly"}`)
+        const alertsRes = await API.get("/alerts")
+        if (alertsRes.data.length > 0) {
+          const latest = alertsRes.data[0]
+          setLastAlert(`${latest.src_ip || "Unknown"} • ${latest.severity || latest.type || "Alert"}`)
+        } else {
+          setLastAlert("No recent threats")
+        }
+      } catch (error) {
+        console.error("Failed to load threat score:", error)
       }
     }
 
-    const interval = setInterval(() => {
-      const now = Date.now()
+    loadThreatScore()
+    interval = setInterval(loadThreatScore, 3000)
 
-      // Keep only last 60 seconds
-      recentPackets.current = recentPackets.current.filter(
-        p => now - p.time < 60000
-      )
-
-      const total = recentPackets.current.length
-      const anomalies = recentPackets.current.filter(p => p.anomaly).length
-      const critical = recentPackets.current.filter(
-        p => p.severity === "CRITICAL"
-      ).length
-
-      const calculatedScore = Math.min(
-        100,
-        Math.floor(
-          anomalies * 2 +
-          critical * 8 +
-          (total > 0 ? (anomalies / total) * 50 : 0)
-        )
-      )
-
-      setScore(calculatedScore)
-    }, 2000)
-
-    return () => {
-      ws.close()
-      clearInterval(interval)
-    }
+    return () => clearInterval(interval)
   }, [])
 
   const threat = getThreatLevel(score)
 
   return (
-    <div className="card p-3 summary-card">
+    <div className="card summary-card threat-score-card">
       <div className="d-flex justify-content-between align-items-center mb-2">
-        <h6 className="text-secondary mb-0">Threat Score</h6>
+        <h6 className="summary-label mb-0">Threat Score</h6>
         <span
           className="badge"
           style={{
             backgroundColor: threat.color,
-            color: "#fff"
+            color: "#fff",
+            fontSize: "0.72rem"
           }}
         >
           {threat.label}
         </span>
       </div>
 
-      <h2 className="fw-bold mb-1" style={{ color: threat.color }}>
-        {score}/100
-      </h2>
+      <div className="d-flex align-items-end justify-content-between">
+        <h2
+          className="summary-value mb-0"
+          style={{
+            color: threat.color,
+            fontSize: "2rem"
+          }}
+        >
+          {score}
+          <span style={{ fontSize: "1rem", color: "#94a3b8" }}>/100</span>
+        </h2>
+      </div>
 
-      <small className="text-secondary">
-        Last Alert: {lastAlert}
+      <div
+        style={{
+          height: "1px",
+          background: "#1e293b",
+          borderRadius: "999px",
+          overflow: "hidden",
+          marginTop: "1px"
+        }}
+      >
+        <div
+          style={{
+            width: `${score}%`,
+            height: "100%",
+            background: threat.color,
+            transition: "width 0.5s ease"
+          }}
+        />
+      </div>
+
+      <small
+        style={{
+          color: "#94a3b8",
+          fontSize: "0.72rem",
+          marginTop: "1px",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
+        }}
+        title={lastAlert}
+      >
+        Last: {lastAlert}
       </small>
     </div>
   )

@@ -1,15 +1,14 @@
 from scapy.all import sniff, IP, TCP, UDP, Ether
-from datetime import datetime
+from datetime import datetime, timezone
 from core.event_bus import event_bus
 from database.buffer import add_packet
+from config import MODE
 
 
 def process_packet(packet):
-
-    if not packet.haslayer(IP):
-        return
-
     try:
+        if not packet.haslayer(IP):
+            return
 
         src_port = None
         dst_port = None
@@ -30,7 +29,7 @@ def process_packet(packet):
             dst_mac = packet[Ether].dst
 
         packet_data = {
-            "timestamp": str(datetime.utcnow()),
+            "timestamp": str(datetime.now(timezone.utc).isoformat()),
             "src_ip": packet[IP].src,
             "dst_ip": packet[IP].dst,
             "src_mac": src_mac,
@@ -41,8 +40,10 @@ def process_packet(packet):
             "length": len(packet)
         }
 
+        # keep raw packet buffer for dashboard / backend usage
         add_packet(packet_data)
 
+        # send into pipeline
         event_bus.publish("packet", packet_data)
 
     except Exception as e:
@@ -50,10 +51,16 @@ def process_packet(packet):
 
 
 def start_sniffer():
+    if MODE == "DEMO":
+        print("🟡 DEMO MODE: Live packet sniffer disabled")
+        return
 
-    print("NetSentinel Packet Sniffer Started...")
+    print("🟢 LIVE MODE: NetSentinel Packet Sniffer Started...")
 
-    sniff(
-        prn=process_packet,
-        store=False
-    )
+    try:
+        sniff(
+            prn=process_packet,
+            store=False
+        )
+    except Exception as e:
+        print("Sniffer error:", e)

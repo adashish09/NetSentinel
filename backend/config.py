@@ -1,0 +1,1 @@
+MODE = "DEMO"  # Options: "LIVE", "DEMO"
